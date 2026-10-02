@@ -1,0 +1,30 @@
+{
+  "name": "@hyodotdev/openiap-provider-amazon-example",
+  "version": "0.0.1",
+  "description": "Educational community FireOS provider example; use the official OpenIAP Amazon integration for apps",
+  "main": "app.plugin.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hyodotdev/openiap-google-amazon-community.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "app.plugin.js",
+    "maven",
+    "provider-artifact.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "package:provider": "node scripts/package-provider.mjs",
+    "test:package": "node --test scripts/build-input.test.mjs scripts/package.test.mjs"
+  },
+  "peerDependencies": {
+    "expo": ">=57.0.0 <58",
+    "expo-build-properties": ">=57.0.0 <58",
+    "expo-iap": ">=5.8.2 <6"
+  }
+}

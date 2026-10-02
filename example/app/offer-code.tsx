@@ -1,0 +1,324 @@
+import React, {useState} from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  Platform,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
+import {openRedeemOfferCode, useIAP} from 'expo-iap';
+
+/** Offer code redemption example for iOS and Android. */
+
+const isVegaOS = (): boolean => String(Platform.OS) === 'kepler';
+
+const getPlatformContent = () => {
+  if (isVegaOS() || Platform.OS === 'android') {
+    return {
+      buttonText: 'Amazon provider example',
+      buttonSubtext: 'Offer code redemption is unavailable',
+      howItWorks:
+        '• Amazon provider example uses Amazon App Tester or Amazon Appstore catalog data\n• iOS offer codes and Google Play promo codes do not apply\n• Use the Purchase Flow or Subscription Flow screens to test Amazon IAP',
+      platformNote:
+        'Amazon provider example does not expose an OpenIAP offer-code redemption API.',
+      testingInfo:
+        '• Configure amazon.sdktester.json for sandbox products\n• Enable sandbox mode with amazon.config.json\n• Test purchases through the Amazon App Tester flow',
+    };
+  }
+
+  const isIOS = Platform.OS === 'ios';
+  return {
+    buttonText: isIOS ? '🎁 Redeem Offer Code' : '🎁 Open Redemption Flow',
+    buttonSubtext: isIOS
+      ? 'Enter code in-app'
+      : 'Redeem with the selected store',
+    howItWorks: isIOS
+      ? '• Tap the button below to open the redemption sheet\n• Enter your offer code\n• The system will validate and apply the code\n• Your purchase will appear in purchase history'
+      : '• Open the selected store’s redemption flow\n• Enter a code if the store supports redemption\n• Refresh available purchases after completing redemption',
+    platformNote: isIOS
+      ? 'iOS supports in-app code redemption via StoreKit'
+      : 'Android redemption support depends on the selected store',
+    testingInfo: isIOS
+      ? '• Use TestFlight or App Store Connect to generate test codes\n• Test on real devices (not simulators)\n• Sandbox environment supports offer codes'
+      : '• Use the selected store’s test codes and test account\n• Follow that provider’s sandbox instructions',
+  };
+};
+
+export default function OfferCodeScreen() {
+  const {connected} = useIAP();
+  const [isRedeeming, setIsRedeeming] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const platformContent = getPlatformContent();
+  const isIOS = Platform.OS === 'ios';
+  const isVega = isVegaOS() || Platform.OS === 'android';
+
+  const handleRedeemCode = async () => {
+    if (isVega) {
+      setStatusMessage(
+        'Offer code redemption is not supported on amazon-example. Use Amazon App Tester catalog entries and the standard purchase or subscription flows instead.',
+      );
+      return;
+    }
+
+    if (isIOS && !connected) {
+      Alert.alert('Not Connected', 'Please wait for store connection');
+      return;
+    }
+
+    setIsRedeeming(true);
+
+    try {
+      const purchase = await openRedeemOfferCode();
+      if (purchase) {
+        Alert.alert(
+          'Verified Redemption',
+          `Redeemed ${purchase.productId} (${purchase.id}).`,
+        );
+      } else if (isIOS) {
+        Alert.alert(
+          'Redemption Sheet Presented',
+          'The system sheet did not return a transaction directly. Refresh available purchases after completing redemption.',
+        );
+      } else {
+        Alert.alert(
+          'Redemption Requested',
+          'The selected store opens its redemption flow when supported. Refresh available purchases after redeeming.',
+        );
+      }
+    } catch (error) {
+      console.log('Error redeeming code:', error);
+      Alert.alert(
+        'Error',
+        `Failed to redeem code: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setIsRedeeming(false);
+    }
+  };
+
+  return (
+    <ScrollView style={styles.container}>
+      <View style={styles.content}>
+        <Text style={styles.title}>Offer Code Redemption</Text>
+
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>How it works:</Text>
+          <Text style={styles.infoText}>{platformContent.howItWorks}</Text>
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.redeemButton,
+            ((isIOS && !connected) || isRedeeming) && styles.disabledButton,
+          ]}
+          onPress={handleRedeemCode}
+          disabled={(isIOS && !connected) || isRedeeming}
+        >
+          {isRedeeming ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <>
+              <Text style={styles.buttonText}>
+                {platformContent.buttonText}
+              </Text>
+              <Text style={styles.buttonSubtext}>
+                {platformContent.buttonSubtext}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.platformNote}>
+          <Text style={styles.noteTitle}>
+            Platform:{' '}
+            {isVega ? 'Amazon provider example' : isIOS ? 'ios' : 'android'}
+          </Text>
+          <Text style={styles.noteText}>{platformContent.platformNote}</Text>
+        </View>
+
+        {statusMessage ? (
+          <View style={styles.statusMessageBox}>
+            <Text style={styles.statusMessageText}>{statusMessage}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.testingSection}>
+          <Text style={styles.sectionTitle}>Testing Offer Codes</Text>
+          <Text style={styles.testingText}>{platformContent.testingInfo}</Text>
+        </View>
+
+        <View style={styles.statusSection}>
+          <Text style={styles.statusTitle}>Connection Status</Text>
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.statusIndicator,
+                connected ? styles.connected : styles.disconnected,
+              ]}
+            />
+            <Text style={styles.statusText}>
+              {connected ? 'Connected to Store' : 'Connecting...'}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  content: {
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#333',
+  },
+  infoCard: {
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  infoTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
+  },
+  infoText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#555',
+  },
+  redeemButton: {
+    backgroundColor: '#6c757d',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  buttonSubtext: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+  },
+  platformNote: {
+    backgroundColor: '#e9ecef',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  noteTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+    color: '#495057',
+  },
+  noteText: {
+    fontSize: 14,
+    color: '#6c757d',
+  },
+  testingSection: {
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
+  },
+  testingText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#555',
+  },
+  statusSection: {
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  statusTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  connected: {
+    backgroundColor: '#28a745',
+  },
+  disconnected: {
+    backgroundColor: '#dc3545',
+  },
+  statusText: {
+    fontSize: 14,
+    color: '#555',
+  },
+  statusMessageBox: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#fed7aa',
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 20,
+    padding: 16,
+  },
+  statusMessageText: {
+    color: '#9a3412',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+});

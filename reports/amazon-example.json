@@ -1,0 +1,104 @@
+{
+  "suiteVersion": "4.0.0",
+  "clientProtocolVersion": "0.2.0",
+  "storeId": "amazon-example",
+  "store": "unknown",
+  "capabilities": ["pendingPurchases"],
+  "scope": {
+    "kind": "android-provider",
+    "requiredBehaviors": [
+      "capabilities.declared-capabilities-match-the-matrix",
+      "capabilities.unsupported-operations-degrade-predictably",
+      "completion.finish-is-idempotent",
+      "errors.store-codes-normalize-to-spec-error-codes",
+      "errors.unrecognized-store-code-normalizes-to-unknown",
+      "identifiers.purchase-carries-a-concrete-store",
+      "identifiers.purchase-token-is-stable-across-reads",
+      "products.fetch-returns-requested-skus",
+      "provider.invalid-purchase-emits-error-once",
+      "purchases.pending-purchase-is-not-delivered-as-purchased",
+      "purchases.request-emits-purchase-updated-on-success",
+      "restoration.available-purchases-returns-owned-items",
+      "subscriptions.active-subscription-is-reported-active",
+      "subscriptions.groups-keep-independent-identifiers",
+      "subscriptions.pending-subscription-is-not-active",
+      "subscriptions.unknown-state-subscription-is-not-active"
+    ],
+    "complete": true
+  },
+  "conformant": true,
+  "results": [
+    {
+      "id": "android-provider.offer-code-redemption",
+      "outcome": "not-applicable"
+    },
+    {
+      "id": "android-provider.subscription-billing-issue",
+      "outcome": "not-applicable"
+    },
+    {
+      "id": "capabilities.declared-capabilities-match-the-matrix",
+      "outcome": "pass"
+    },
+    {
+      "id": "capabilities.unsupported-operations-degrade-predictably",
+      "outcome": "pass"
+    },
+    {
+      "id": "completion.finish-is-idempotent",
+      "outcome": "pass"
+    },
+    {
+      "id": "errors.store-codes-normalize-to-spec-error-codes",
+      "outcome": "pass"
+    },
+    {
+      "id": "errors.unrecognized-store-code-normalizes-to-unknown",
+      "outcome": "pass"
+    },
+    {
+      "id": "identifiers.purchase-carries-a-concrete-store",
+      "outcome": "pass"
+    },
+    {
+      "id": "identifiers.purchase-token-is-stable-across-reads",
+      "outcome": "pass"
+    },
+    {
+      "id": "products.fetch-returns-requested-skus",
+      "outcome": "pass"
+    },
+    {
+      "id": "provider.invalid-purchase-emits-error-once",
+      "outcome": "pass"
+    },
+    {
+      "id": "purchases.pending-purchase-is-not-delivered-as-purchased",
+      "outcome": "pass"
+    },
+    {
+      "id": "purchases.request-emits-purchase-updated-on-success",
+      "outcome": "pass"
+    },
+    {
+      "id": "restoration.available-purchases-returns-owned-items",
+      "outcome": "pass"
+    },
+    {
+      "id": "subscriptions.active-subscription-is-reported-active",
+      "outcome": "pass"
+    },
+    {
+      "id": "subscriptions.groups-keep-independent-identifiers",
+      "outcome": "pass"
+    },
+    {
+      "id": "subscriptions.pending-subscription-is-not-active",
+      "outcome": "pass"
+    },
+    {
+      "id": "subscriptions.unknown-state-subscription-is-not-active",
+      "outcome": "pass"
+    }
+  ]
+}

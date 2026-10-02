@@ -1,0 +1,141 @@
+name: Publish and verify GitHub package
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact main commit whose Verify example run passed
+        required: true
+      verification_run:
+        description: Successful Verify example run ID at expected_sha
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: community-package-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Require exact successful verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          VERIFY_RUN: ${{ inputs.verification_run }}
+        run: |
+          test "$EXPECTED_SHA" = "$GITHUB_SHA"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFY_RUN" > /tmp/verified-run.json
+          jq -e --arg sha "$EXPECTED_SHA" '.head_sha == $sha and .head_branch == "main" and .event == "push" and .name == "Verify example" and .status == "completed" and .conclusion == "success"' /tmp/verified-run.json
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$EXPECTED_SHA"
+          version="$(node -p 'require("./package.json").version')"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/community-provider-v$version" --jq .object.sha)" = "$EXPECTED_SHA"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: registry-inputs
+          path: inputs
+          run-id: ${{ inputs.verification_run }}
+          github-token: ${{ github.token }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          registry-url: https://npm.pkg.github.com
+          scope: "@hyodotdev"
+      - name: Publish verified immutable package
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          test "$(jq -r .sourceCommit inputs/distribution.json)" = "$EXPECTED_SHA"
+          node -e 'const fs=require("fs"),crypto=require("crypto"),d=require("./inputs/distribution.json"); const actual="sha512-"+crypto.createHash("sha512").update(fs.readFileSync("inputs/"+d.tarball)).digest("base64"); if(actual!==d.integrity) throw Error("Verified tarball changed");'
+          coordinate="$(jq -r '.package + "@" + .version' inputs/distribution.json)"
+          if npm view "$coordinate" dist.integrity --registry=https://npm.pkg.github.com > /tmp/existing-integrity; then
+            test "$(cat /tmp/existing-integrity)" = "$(jq -r .integrity inputs/distribution.json)"
+          else
+            npm publish "./inputs/$(jq -r .tarball inputs/distribution.json)" --registry=https://npm.pkg.github.com --tag example
+          fi
+          npm view "$coordinate" dist.integrity --registry=https://npm.pkg.github.com > /tmp/published-integrity
+          test "$(cat /tmp/published-integrity)" = "$(jq -r .integrity inputs/distribution.json)"
+  registry-consumer:
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: registry-inputs
+          path: ${{ runner.temp }}/registry-consumer
+          run-id: ${{ inputs.verification_run }}
+          github-token: ${{ github.token }}
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.13"
+      - name: Require public community visibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api orgs/hyodotdev/packages/npm/openiap-provider-amazon-example > /tmp/package-visibility.json
+          jq -e --arg repo "$GITHUB_REPOSITORY" '.visibility == "public" and .repository.full_name == $repo' /tmp/package-visibility.json
+          jq '{name,visibility,html_url,repository:.repository.full_name}' /tmp/package-visibility.json > "$RUNNER_TEMP/registry-consumer/package-visibility.json"
+      - name: Install package from GitHub Packages with a fresh cache
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+          BUN_INSTALL_CACHE_DIR: ${{ runner.temp }}/empty-bun-cache
+        working-directory: ${{ runner.temp }}/registry-consumer/example
+        run: |
+          # The package manager expands the token placeholder.
+          # shellcheck disable=SC2016
+          printf '%s\n' '@hyodotdev:registry=https://npm.pkg.github.com' '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' > .npmrc
+          bun install --ignore-scripts
+          node "$GITHUB_WORKSPACE/scripts/check-registry-consumer.mjs" "$RUNNER_TEMP/registry-consumer"
+          coordinate="$(jq -r '.package + "@" + .version' ../distribution.json)"
+          rm -- "../$(jq -r .tarball ../distribution.json)"
+          npm pack "$coordinate" --ignore-scripts --registry=https://npm.pkg.github.com --pack-destination ..
+          node -e 'const fs=require("fs"),crypto=require("crypto"),d=require("../distribution.json");const actual="sha512-"+crypto.createHash("sha512").update(fs.readFileSync("../"+d.tarball)).digest("base64");if(actual!==d.integrity)throw Error("Registry download changed");'
+      - name: Check registry consumer and actual optimized runtime dependency
+        env:
+          GRADLE_USER_HOME: ${{ runner.temp }}/empty-gradle-home
+          REGISTRY_PROOF_WORKSPACE: ${{ runner.temp }}/registry-consumer
+        working-directory: ${{ runner.temp }}/registry-consumer/example
+        run: |
+          bun run typecheck
+          bun run test
+          bunx expo prebuild --platform android --no-install
+          cd android
+          ./gradlew -I "$GITHUB_WORKSPACE/scripts/registry-proof.gradle" -PreactNativeArchitectures=arm64-v8a -Pandroid.enableMinifyInReleaseBuilds=true :app:assembleRelease :app:communityProviderProof
+          node "$GITHUB_WORKSPACE/scripts/check-registry-consumer.mjs" "$REGISTRY_PROOF_WORKSPACE" built
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: registry-proof
+          path: |
+            ${{ runner.temp }}/registry-consumer/registry-proof.json
+            ${{ runner.temp }}/registry-consumer/distribution.json
+            ${{ runner.temp }}/registry-consumer/package-visibility.json
+            ${{ runner.temp }}/registry-consumer/*.tgz
+            ${{ runner.temp }}/registry-consumer/example/bun.lock
+            ${{ runner.temp }}/registry-consumer/example/android/app/build/outputs/apk/release/*.apk
+            ${{ runner.temp }}/registry-consumer/example/android/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+          retention-days: 30

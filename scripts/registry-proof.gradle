@@ -1,0 +1,26 @@
+import groovy.json.JsonOutput
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+
+gradle.projectsEvaluated {
+    def app = rootProject.findProject(":app")
+    if (app == null) return
+    app.tasks.register("communityProviderProof") {
+        doLast {
+            def runtime = app.configurations.releaseRuntimeClasspath
+            def providerFiles = runtime.incoming.artifactView {
+                componentFilter { id -> id instanceof ModuleComponentIdentifier && id.group == "dev.openiap.providers" }
+                attributes { attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "aar") }
+            }.artifacts.artifacts.collectEntries { artifact ->
+                [(artifact.id.componentIdentifier): artifact.file.absolutePath]
+            }
+            def output = runtime.incoming.resolutionResult.allComponents.findAll {
+                it.id instanceof ModuleComponentIdentifier
+            }.collect { component ->
+                [group: component.id.group, name: component.id.module,
+                 version: component.id.version, file: providerFiles[component.id]]
+            }
+            new File(System.getenv("REGISTRY_PROOF_WORKSPACE"), "gradle-proof.json").text = JsonOutput.prettyPrint(JsonOutput.toJson(output))
+        }
+    }
+}
